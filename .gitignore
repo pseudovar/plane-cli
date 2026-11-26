@@ -1,0 +1,13 @@
+/target/
+**/*.rs.bk
+/gen/
+/docs/book/
+
+# Local credentials from `plane-cli config init`
+.plane-cli.env
+.env
+sentry.env
+
+# Local editor and agent settings
+.claude/
+.cursor/

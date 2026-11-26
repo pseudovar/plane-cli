@@ -1,0 +1,25 @@
+[package]
+name = "plane-core"
+version = "0.3.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Shared Plane REST API client, cache, and validation for plane-cli"
+repository.workspace = true
+homepage.workspace = true
+readme = "../README.md"
+keywords = ["plane", "api-client", "project-management"]
+categories = ["api-bindings"]
+publish = false
+
+[dependencies]
+serde = { version = "1.0.210", features = ["derive"] }
+serde_json = "1.0"
+reqwest = { version = "0.12.9", default-features = false, features = ["blocking", "json", "multipart", "rustls-tls"] }
+thiserror = "2.0"
+directories = "5.0"
+uuid = { version = "1.10.0", features = ["serde", "v4"] }
+sha2 = "0.10.8"
+regex = "1.10.6"
+url = "2.5.4"
+mime_guess = "2"

@@ -1,0 +1,46 @@
+[package]
+name = "plane-cli"
+version = "0.3.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Unofficial command-line client and TUI for the Plane project tracker"
+repository.workspace = true
+homepage.workspace = true
+readme = "../README.md"
+keywords = ["plane", "cli", "project-management", "tui", "agents"]
+categories = ["command-line-utilities"]
+publish = false
+
+[[bin]]
+name = "plane-cli"
+path = "src/main.rs"
+
+[dependencies]
+plane-core = { path = "../plane-core" }
+clap = { version = "4.5.26", features = ["derive", "env"] }
+clap_complete = "4.5.26"
+dotenvy = "0.15.7"
+html2text = "0.17.1"
+serde_json = "1.0"
+serde = { version = "1.0.210", features = ["derive"] }
+ratatui = "0.29.0"
+crossterm = "0.28.1"
+uuid = { version = "1.10.0", features = ["v4"] }
+semver = "1"
+sentry = { version = "0.48.2", default-features = false, features = ["contexts", "panic", "transport"] }
+rpassword = "7.4"
+sha2 = "0.10.8"
+toml = "1.1.8"
+regex = "1.12.3"
+strsim = "0.11.1"
+reqwest = { version = "0.12.9", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+tempfile = "3"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.170"
+
+[dev-dependencies]
+sentry = { version = "0.48.2", default-features = false, features = ["test"] }
+mockito = "1.7"
+url = "2.5.4"

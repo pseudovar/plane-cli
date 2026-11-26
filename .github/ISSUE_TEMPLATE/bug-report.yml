@@ -1,0 +1,71 @@
+name: Bug report
+description: Something in plane-cli does not work as documented
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Remove API keys, private hostnames and workspace data** from everything you paste. This tracker is public.
+        For a security problem, use a [private advisory](https://github.com/pseudovar/plane-cli/security/advisories/new) instead.
+  - type: input
+    id: version
+    attributes:
+      label: plane-cli version
+      description: Output of `plane-cli --version`
+      placeholder: plane-cli 0.3.0
+    validations:
+      required: true
+  - type: input
+    id: plane-version
+    attributes:
+      label: Plane version
+      placeholder: Community Edition 1.4.2
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Linux x86_64
+        - macOS arm64
+        - macOS x86_64
+        - Other (built from source)
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command
+      description: The exact command you ran, with private values replaced.
+      render: shell
+      placeholder: plane-cli --json work-items get --work-item ENG-42
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: Include the `error.code` and exit code if there was one.
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: "`plane-cli config doctor` output (optional)"
+      description: Check it for hostnames before you paste it.
+      render: text
+  - type: checkboxes
+    id: redaction
+    attributes:
+      label: Before submitting
+      options:
+        - label: I removed API keys, private hostnames and workspace data.
+          required: true

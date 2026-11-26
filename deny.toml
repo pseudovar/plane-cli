@@ -1,0 +1,45 @@
+# cargo-deny configuration: https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+# The platforms plane-cli ships binaries for.
+targets = [
+    "x86_64-unknown-linux-gnu",
+    "aarch64-apple-darwin",
+    "x86_64-apple-darwin",
+]
+all-features = false
+
+[advisories]
+# Vulnerabilities and unsound crates always fail. Add an exception here only with a reason.
+yanked = "deny"
+unmaintained = "workspace"
+ignore = []
+
+[licenses]
+# Permissive licenses only. A copyleft license (GPL, AGPL, LGPL, MPL, ...) is not listed, so
+# it fails this check and has to be reviewed by a maintainer.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.9
+# Reviewed exception: option-ext is MPL-2.0 (file-level copyleft), pulled in by `directories`
+# through dirs-sys. It is used unmodified. A new version must be reviewed again.
+exceptions = [{ crate = "option-ext@0.2.0", allow = ["MPL-2.0"] }]
+
+[bans]
+multiple-versions = "allow"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

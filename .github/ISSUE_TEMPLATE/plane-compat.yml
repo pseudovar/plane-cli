@@ -1,0 +1,61 @@
+name: Plane compatibility
+description: plane-cli behaves differently on your version of Plane
+labels: ["plane-compat"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        plane-cli is tested on Plane Community Edition 1.4.2. Use this form when another version behaves differently.
+        **Remove API keys, private hostnames and workspace data** from everything you paste. This tracker is public.
+  - type: input
+    id: plane-version
+    attributes:
+      label: Plane version
+      placeholder: Community Edition 1.5.0
+    validations:
+      required: true
+  - type: dropdown
+    id: edition
+    attributes:
+      label: Edition
+      options:
+        - Community (self-hosted)
+        - Commercial (self-hosted)
+        - Plane Cloud
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: plane-cli version
+      placeholder: plane-cli 0.3.0
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: response
+    attributes:
+      label: Response
+      description: The `--json` output, with private values replaced. Include the HTTP status and path if shown.
+      render: json
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Links to Plane release notes or API docs that explain the change, if you have them.
+  - type: checkboxes
+    id: redaction
+    attributes:
+      label: Before submitting
+      options:
+        - label: I removed API keys, private hostnames and workspace data.
+          required: true

@@ -1,0 +1,10 @@
+[workspace]
+resolver = "2"
+members = ["plane-core", "plane-cli"]
+
+[workspace.package]
+edition = "2021"
+rust-version = "1.86"
+license = "MIT"
+repository = "https://github.com/pseudovar/plane-cli"
+homepage = "https://pseudovar.github.io/plane-cli/"

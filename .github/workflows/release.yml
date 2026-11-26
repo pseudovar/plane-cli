@@ -1,0 +1,166 @@
+# Create a GitHub Release and upload binaries for a version tag (e.g. v0.2.0).
+# Runs when a maintainer pushes a tag, or when auto-tag.yml dispatches it: tags pushed with
+# GITHUB_TOKEN don't trigger `push` workflows, so auto-tag calls this with `workflow_dispatch`.
+# Requires: tag must match `version` in both plane-cli and plane-core Cargo.toml (see verify job).
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing version tag to release, e.g. v0.2.0"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # The tag being released: the dispatch input, or the pushed tag.
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - name: Verify tag matches crate versions
+        run: |
+          set -euo pipefail
+          TAG="${RELEASE_TAG#v}"
+          VER_CLI=$(grep -m1 '^version' plane-cli/Cargo.toml | sed -n 's/^version = "\([^"]*\)".*/\1/p')
+          VER_CORE=$(grep -m1 '^version' plane-core/Cargo.toml | sed -n 's/^version = "\([^"]*\)".*/\1/p')
+          if [ "$TAG" != "$VER_CLI" ]; then
+            echo "::error::Git tag '${RELEASE_TAG}' expects plane-cli version '$TAG' but Cargo.toml has '$VER_CLI'"
+            exit 1
+          fi
+          if [ "$TAG" != "$VER_CORE" ]; then
+            echo "::error::Git tag '${RELEASE_TAG}' expects plane-core version '$TAG' but Cargo.toml has '$VER_CORE'"
+            exit 1
+          fi
+          echo "OK: tag $TAG matches plane-cli and plane-core"
+
+  build:
+    needs: verify
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Use ubuntu-22.04 to build against an older glibc baseline than ubuntu-latest.
+          - os: ubuntu-22.04
+            triple: x86_64-unknown-linux-gnu
+          - os: macos-latest
+            triple: aarch64-apple-darwin
+          # Intel macOS: cross-compiled on the arm64 macOS runners.
+          - os: macos-latest
+            triple: x86_64-apple-darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          toolchain: stable
+      - name: Rust target (cross x86_64 macOS)
+        if: matrix.triple == 'x86_64-apple-darwin'
+        run: rustup target add x86_64-apple-darwin
+      - name: Build
+        env:
+          # Optional. Without this secret the release still builds, with telemetry inactive.
+          PLANE_CLI_SENTRY_DSN: ${{ secrets.PLANE_CLI_SENTRY_DSN }}
+          TRIPLE: ${{ matrix.triple }}
+        run: |
+          set -euo pipefail
+          if [ "$TRIPLE" = "x86_64-apple-darwin" ]; then
+            cargo build --locked --release -p plane-cli --target x86_64-apple-darwin
+          else
+            cargo build --locked --release -p plane-cli
+          fi
+      - name: Package
+        env:
+          TAG_NAME: ${{ env.RELEASE_TAG }}
+          TRIPLE: ${{ matrix.triple }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG_NAME#v}"
+          STAGING="plane-cli-${VERSION}-${TRIPLE}"
+          mkdir -p "$STAGING"
+          if [ "$TRIPLE" = "x86_64-apple-darwin" ]; then
+            cp "target/x86_64-apple-darwin/release/plane-cli" "$STAGING/"
+          else
+            cp target/release/plane-cli "$STAGING/"
+          fi
+          tar czvf "${STAGING}.tar.gz" "$STAGING"
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "${STAGING}.tar.gz" | tee "${STAGING}.tar.gz.sha256"
+          else
+            shasum -a 256 "${STAGING}.tar.gz" | tee "${STAGING}.tar.gz.sha256"
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: bundle-${{ matrix.triple }}
+          path: |
+            plane-cli-*.tar.gz
+            plane-cli-*.tar.gz.sha256
+
+  release:
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          persist-credentials: false
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Release metadata
+        id: meta
+        env:
+          TAG_NAME: ${{ env.RELEASE_TAG }}
+        run: |
+          set -euo pipefail
+          if [[ "$TAG_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-.+ ]]; then
+            echo "prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+          TAG="$TAG_NAME"
+          PREV="$(git tag -l 'v*' --sort=-version:refname | grep -vFx "$TAG" | head -1 || true)"
+          {
+            echo "## plane-cli ${TAG}"
+            echo ""
+            if [ -n "$PREV" ]; then
+              echo "**Compare:** https://github.com/${GITHUB_REPOSITORY}/compare/${PREV}...${TAG}"
+            else
+              echo "Initial release."
+            fi
+          } > release_notes.md
+
+      - uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_TAG }}
+          body_path: release_notes.md
+          prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
+          files: |
+            dist/*.tar.gz
+            dist/*.sha256
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

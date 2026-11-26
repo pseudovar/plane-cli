@@ -1,0 +1,13 @@
+[book]
+title = "plane-cli"
+description = "An unofficial command-line client and TUI for the Plane project tracker"
+language = "en"
+src = "src"
+
+[build]
+build-dir = "book"
+
+[output.html]
+site-url = "/plane-cli/"
+git-repository-url = "https://github.com/pseudovar/plane-cli"
+edit-url-template = "https://github.com/pseudovar/plane-cli/edit/main/docs/{path}"

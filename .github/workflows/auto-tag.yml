@@ -1,0 +1,109 @@
+# Tag a new version after CI passes on main, then dispatch release.yml (build + GitHub Release).
+# A tag pushed with GITHUB_TOKEN does not trigger `push` workflows, so release.yml is dispatched.
+#
+# This runs with write access, so it acts only on a successful CI run for a push to main in this
+# repository (never a fork or pull request), and it runs no code from the commit: it only reads
+# version strings. It tags only a version newer than the latest tag. With no tags it does nothing,
+# so the first release is a deliberate manual tag (see CONTRIBUTING.md).
+
+name: Auto-tag on version bump
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  tag:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write # push the version tag
+      actions: write # dispatch release.yml
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Read version and tag if new
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          SEMVER='^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'
+          # True when version $1 is strictly newer than version $2.
+          newer() {
+            local a="${1%%-*}" b="${2%%-*}"
+            [ "$1" != "$2" ] || return 1
+            if [ "$a" != "$b" ]; then
+              [ "$(printf '%s\n%s\n' "$a" "$b" | sort -V | tail -n 1)" = "$a" ]
+            elif [ "$1" = "$a" ]; then
+              return 0 # a release beats its own prereleases
+            elif [ "$2" = "$b" ]; then
+              return 1
+            else
+              [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | tail -n 1)" = "$1" ]
+            fi
+          }
+
+          git fetch --quiet --tags --force origin
+          git fetch --quiet origin main
+          if ! git merge-base --is-ancestor "$SHA" FETCH_HEAD; then
+            echo "$SHA is no longer on main: nothing to do."
+            exit 0
+          fi
+          VER=$(git show "$SHA:plane-cli/Cargo.toml" | sed -n 's/^version = "\([^"]*\)".*/\1/p' | head -n 1)
+          CORE_VER=$(git show "$SHA:plane-core/Cargo.toml" | sed -n 's/^version = "\([^"]*\)".*/\1/p' | head -n 1)
+          if ! printf '%s' "$VER" | grep -Eq "$SEMVER"; then
+            echo "::error::Unexpected version '$VER'"
+            exit 1
+          fi
+          if [ "$VER" != "$CORE_VER" ]; then
+            echo "::error::plane-cli is $VER but plane-core is $CORE_VER"
+            exit 1
+          fi
+          TAG="v${VER}"
+          LATEST=""
+          while IFS= read -r t; do
+            v="${t#v}"
+            printf '%s' "$v" | grep -Eq "$SEMVER" || continue
+            if [ -z "$LATEST" ] || newer "$v" "$LATEST"; then
+              LATEST="$v"
+            fi
+          done < <(git tag -l 'v*')
+          if [ -z "$LATEST" ]; then
+            echo "No version tags yet: the first release is a manual tag."
+            exit 0
+          fi
+          if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
+            echo "Tag $TAG already exists: nothing to do."
+            exit 0
+          fi
+          if ! newer "$VER" "$LATEST"; then
+            echo "$VER is not newer than the latest tag v$LATEST: nothing to do."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$TAG" "$SHA"
+          if ! git push origin "refs/tags/$TAG"; then
+            if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+              echo "Another run already pushed $TAG: nothing to do."
+              exit 0
+            fi
+            echo "::error::Could not push $TAG"
+            exit 1
+          fi
+          echo "Created and pushed $TAG"
+          gh workflow run release.yml --ref main -f tag="$TAG"
+          echo "Dispatched release.yml for $TAG"
